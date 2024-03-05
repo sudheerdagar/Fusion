@@ -6,6 +6,7 @@ from functools import reduce
 from django.http import JsonResponse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, HttpResponseRedirect
 # Create your views here.
 from django.db.models import Q
@@ -483,19 +484,24 @@ def getConvocationFlag(request):  # Here we are extracting convocation_flag
         context['result'] = 'Failure'
     return HttpResponse(json.dumps(context), content_type='getConvocationFlag/json')
 
+@csrf_exempt
 def getContent(request):
     award_name = request.GET.get('award_name')
+    print(award_name)
     context = {}
     try:
         award = Award_and_scholarship.objects.get(award_name=award_name)
         context['result'] = 'Success'
         context['content'] = award.catalog
-        print(type(award.catalog))
+        print(award.catalog)
         # context['content'] = 'Hi'
 
     except:
         context['result'] = 'Failure'
-    return HttpResponse(json.dumps(context), content_type='getContent/json')
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        return JsonResponse({'result': context['result'], 'content': context['content']})
+    else:
+        return HttpResponse(json.dumps(context), content_type='getContent/json')
 
 def checkDate(start_date, end_date):
     current_date = datetime.date.today()
@@ -507,6 +513,7 @@ def checkDate(start_date, end_date):
     else:
         return False
 
+@csrf_exempt
 def updateEndDate(request):
     id = request.GET.get('up_id')
     end_date = request.GET.get('up_d')
@@ -517,7 +524,10 @@ def updateEndDate(request):
         context['result'] = 'Success'
     else:
         context['result'] = 'Failure'
-    return HttpResponse(json.dumps(context), content_type='updateEndDate/json')
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        return JsonResponse({'result': context['result']})
+    else:
+        return HttpResponse(json.dumps(context), content_type='updateEndDate/json')
 
 def deleteRelease(request):
     print("deleteRelease")
