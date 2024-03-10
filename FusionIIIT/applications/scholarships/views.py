@@ -382,6 +382,7 @@ def stats(request): #  This view is created for the rest of audience excluding s
     else:
         return sendStatsRenderRequest(request)
 
+@csrf_exempt
 def convenerCatalogue(request):
     if request.method == 'POST':
         award_name = request.POST.get('award_name')
@@ -394,7 +395,10 @@ def convenerCatalogue(request):
             context['result'] = 'Success'
         except:
             context['result'] = 'Failure'
-        return HttpResponse(json.dumps(context), content_type='convenerCatalogue/json')
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            return JsonResponse({'result': context['result']})
+        else:
+            return HttpResponse(json.dumps(context), content_type='convenerCatalogue/json')
     else:
         award_name = request.GET.get('award_name')
         context = {}
@@ -404,7 +408,13 @@ def convenerCatalogue(request):
             context['result'] = 'Success'
         except:
             context['result'] = 'Failure'
-        return HttpResponse(json.dumps(context), content_type='convenerCatalogue/json')
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            if context['result'] == 'Success':
+                return JsonResponse({'result': context['result'], 'catalog': context['catalog']})
+            else:
+                return JsonResponse({'result': context['result']})
+        else:
+            return HttpResponse(json.dumps(context), content_type='convenerCatalogue/json')
 
 
 
@@ -450,7 +460,7 @@ def getWinners(request):
     else:
         context['result'] = 'Failure'
         context['message'] = 'No winners found for the provided criteria'
-
+    
     return JsonResponse(context)
 
 def get_MCM_Flag(request):  # Here we are extracting mcm_flag
@@ -466,9 +476,13 @@ def get_MCM_Flag(request):  # Here we are extracting mcm_flag
         context['result'] = 'Success'
     else:
         context['result'] = 'Failure'
-    return HttpResponse(json.dumps(context), content_type='get_MCM_Flag/json')
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        return JsonResponse({'result': context['result'], 'show_mcm_flag': context['show_mcm_flag']})
+    else:
+        return HttpResponse(json.dumps(context), content_type='get_MCM_Flag/json')
     # return HttpResponseRedirect('/spacs/student_view')
 
+# @csrf_exempt
 def getConvocationFlag(request):  # Here we are extracting convocation_flag
     x = Notification.objects.select_related('student_id', 'release_id').filter(student_id=request.user.extrainfo.id)
     for i in x:
@@ -482,18 +496,19 @@ def getConvocationFlag(request):  # Here we are extracting convocation_flag
         context['result'] = 'Success'
     else:
         context['result'] = 'Failure'
-    return HttpResponse(json.dumps(context), content_type='getConvocationFlag/json')
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        return JsonResponse({'result': context['result'], 'show_convocation_flag': context['show_convocation_flag']})
+    else:
+        return HttpResponse(json.dumps(context), content_type='getConvocationFlag/json')
 
 @csrf_exempt
 def getContent(request):
     award_name = request.GET.get('award_name')
-    print(award_name)
     context = {}
     try:
         award = Award_and_scholarship.objects.get(award_name=award_name)
         context['result'] = 'Success'
         context['content'] = award.catalog
-        print(award.catalog)
         # context['content'] = 'Hi'
 
     except:
