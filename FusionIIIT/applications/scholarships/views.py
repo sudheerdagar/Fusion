@@ -2,7 +2,8 @@ import datetime
 import json
 from operator import or_
 from functools import reduce
-
+from rest_framework import status
+from rest_framework.response import Response
 from django.http import JsonResponse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -20,6 +21,7 @@ from applications.globals.models import (Designation, ExtraInfo,
 from .models import (Award_and_scholarship, Constants, Director_gold,
                      Director_silver, Mcm, Notional_prize, Previous_winner,
                      Proficiency_dm, Release, Notification)
+from .serializers import *
 
 from notification.views import scholarship_portal_notif
 from .validations import MCM_list, MCM_schema, gold_list, gold_schema, silver_list, silver_schema, proficiency_list,proficiency_schema
@@ -271,17 +273,26 @@ def convener_view(request):
             return HttpResponseRedirect('/spacs/convener_view')
 
         elif "SubmitPreviousWinner" in request.POST:
-            winners_list = submitPreviousWinner(request)
-            return sendConvenerRenderRequest(request, { 'winners_list':winners_list })
+            if request.headers['X-MOBILE-ENV'] == 'true':
+                winners=submitPreviousWinner(request)
+                serializer = PreviousWinnerSerializer(winners, many = True)
+                return JsonResponse(serializer.data,safe=False)
+            else:
+                winners_list = submitPreviousWinner(request)
+                return sendConvenerRenderRequest(request, {'winners_list':winners_list})
 
     else:
-        return sendConvenerRenderRequest(request)
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            return JsonResponse({'result': 'Failure'})
+        else:
+            return sendConvenerRenderRequest(request)
 
 
 @login_required(login_url='/accounts/login')
+@csrf_exempt
 def student_view(request):
-
     if request.method == 'POST':
+        
         if 'Submit_MCM' in request.POST:
             return submitMCM(request)
 
@@ -295,10 +306,20 @@ def student_view(request):
             return submitDM(request)
 
         elif "SubmitPreviousWinner" in request.POST:
-            winners_list = submitPreviousWinner(request)
-            return sendStudentRenderRequest(request, {'winners_list':winners_list})
+            if request.headers['X-MOBILE-ENV'] == 'true':
+                winners=submitPreviousWinner(request)
+                serializer = PreviousWinnerSerializer(winners, many = True)
+                return JsonResponse(serializer.data,safe=False)
+            else:
+                winners_list =submitPreviousWinner(request)
+                return sendStudentRenderRequest(request, {'winners_list':winners_list})
     else:
-        return sendStudentRenderRequest(request)
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            data =sendStudentRenderRequest(request)
+            # print(type(data['mcm']))
+            return JsonResponse(data)
+        else:
+            return sendStudentRenderRequest(request)
 
 @login_required(login_url='/accounts/login')
 def staff_view(request):
@@ -368,19 +389,35 @@ def staff_view(request):
             return HttpResponseRedirect('/spacs/staff_view')
 
         elif "SubmitPreviousWinner" in request.POST:
-            winners_list = submitPreviousWinner(request)
-            return sendStaffRenderRequest(request, {'winners_list':winners_list})
+            if request.headers['X-MOBILE-ENV'] == 'true':
+                winners=submitPreviousWinner(request)
+                serializer = PreviousWinnerSerializer(winners, many = True)
+                return JsonResponse(serializer.data,safe=False)
+            else:
+                winners_list = submitPreviousWinner(request)
+                return sendStaffRenderRequest(request, {'winners_list':winners_list})
 
     else:
-        return sendStaffRenderRequest(request)
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            return JsonResponse({'result': 'Failure'})
+        else:
+            return sendStaffRenderRequest(request)
 
 def stats(request): #  This view is created for the rest of audience excluding students, spacs convenor and spacs assistant
     if request.method == 'POST':
         if "SubmitPreviousWinner" in request.POST:
-            winners_list = submitPreviousWinner(request)
-            return sendStatsRenderRequest(request, {'winners_list':winners_list})
+            if request.headers['X-MOBILE-ENV'] == 'true':
+                winners=submitPreviousWinner(request)
+                serializer = PreviousWinnerSerializer(winners, many = True)
+                return JsonResponse(serializer.data,safe=False)
+            else:
+                winners_list = submitPreviousWinner(request)
+                return sendStatsRenderRequest(request, {'winners_list':winners_list})
     else:
-        return sendStatsRenderRequest(request)
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            return JsonResponse({'result': 'Failure'})
+        else:
+            return sendStatsRenderRequest(request)
 
 @csrf_exempt
 def convenerCatalogue(request):
@@ -1058,6 +1095,7 @@ def submitDM(request):
     request.session['last_clicked'] = 'Submit_dm'
     return HttpResponseRedirect('/spacs/student_view')
 
+@csrf_exempt
 def submitPreviousWinner(request):
     request.session["last_clicked"] = "SubmitPreviousWinner"
     PreviousWinnerAward = request.POST.get("PreviousWinnerAward")
@@ -1069,7 +1107,7 @@ def submitPreviousWinner(request):
 
     award = Award_and_scholarship.objects.get(award_name=PreviousWinnerAward)
     winners = Previous_winner.objects.select_related('student','award_id').filter(year=PreviousWinnerAcadYear, award_id=award, programme=PreviousWinnerProgramme)
-
+    print(winners)
     paginator = Paginator(winners, 10)
     page = 1
     try:
@@ -1077,9 +1115,16 @@ def submitPreviousWinner(request):
     except PageNotAnInteger:
         winners_list = paginator.page(1)
     except EmptyPage:
-        # If page is out of range (e.g. 9999), deliver last page of results.
+        # If page is out of range (e.g. 9999), deliver last page of resulxts.
         winners_list = paginator.page(paginator.num_pages)
-    return winners_list
+    # print(json.dumps(winners))
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        # serializer = PreviousWinnerSerializer(winners, many = True)
+        # print(serializer.data)
+        # return Response(serializer.data, status = status.HTTP_200_OK)
+        return winners
+    else:
+        return winners_list
 
 def sendConvenerRenderRequest(request, additionalParams={}):
     context = getCommonParams(request)
@@ -1173,12 +1218,16 @@ def sendStudentRenderRequest(request, additionalParams={}):
         if i.invite_convocation_accept_flag == True:
             show_convocation_flag = True
             break
-    context.update({'time': time, 'ch': ch, 'spi': spi, 'release': release,
-                    'release_count': release_count, 'x_notif_mcm_flag': x_notif_mcm_flag, 'x_notif_con_flag': x_notif_con_flag,
-                    'source': source, 'show_mcm_flag': show_mcm_flag, 'show_convocation_flag': show_convocation_flag,
-                    'update_mcm_flag': update_mcm_flag, 'update_con_flag': update_con_flag, 'mother_occ': mother_occ,'x': x})
-    context.update(additionalParams)
-    return render(request, 'scholarshipsModule/scholarships_student.html',context)
+    # context.update({'time': time, 'ch': ch, 'spi': spi, 'release': release,
+    #                 'release_count': release_count, 'x_notif_mcm_flag': x_notif_mcm_flag, 'x_notif_con_flag': x_notif_con_flag,
+    #                 'source': source, 'show_mcm_flag': show_mcm_flag, 'show_convocation_flag': show_convocation_flag,
+    #                 'update_mcm_flag': update_mcm_flag, 'update_con_flag': update_con_flag, 'mother_occ': mother_occ,'x': x})
+    # context.update(additionalParams)
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        print('mobile')
+        return context
+    else:
+        return render(request, 'scholarshipsModule/scholarships_student.html',context)
 
 def sendStaffRenderRequest(request, additionalParams={}):    
     context = getCommonParams(request)
@@ -1193,6 +1242,8 @@ def sendStatsRenderRequest(request, additionalParams={}):
 def getCommonParams(request):
     student = Student.objects.all()
     mcm = Mcm.objects.select_related('award_id','student').all()
+    mcm=McmSerializer(mcm,many=True)
+    print(type(mcm.data))
     gold = Director_gold.objects.select_related('student','award_id').all()
     silver = Director_silver.objects.select_related('student','award_id').all()
     dandm = Proficiency_dm.objects.select_related('student','award_id').all()
@@ -1208,7 +1259,13 @@ def getCommonParams(request):
         last_clicked = request.session['last_clicked']
     except:
         print('last_clicked not found')
-    context = {'mcm': mcm, 'awards': awards, 'student': student, 'gold': gold, 'silver': silver, 
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        context = {'mcm': McmSerializer(mcm,many=True).data, 'awards': AwardsSerializer(awards,many=True).data, 'student': StudentSerializer(student,many=True).data, 'gold': DirecorGoldMedalSerializer(gold,many=True).data, 'silver': DirectorSilverMedalSerializer(silver,many=True).data, 
+                'dandm': ProficiencyDMSerializer(dandm,many=True).data, 'con': DesignationSerializer(con,many=False).data, 'assis': DesignationSerializer(assis,many=False).data, 'hd': HoldsDesignationSerializer(hd,many=False).data, 'hd1': HoldsDesignationSerializer(hd1,many=False).data, 
+                'last_clicked': last_clicked, 'year_range': year_range, 'active_batches': active_batches}
+        return context
+    else:
+        context = {'mcm': mcm, 'awards': awards, 'student': student, 'gold': gold, 'silver': silver, 
                 'dandm': dandm, 'con': con, 'assis': assis, 'hd': hd, 'hd1': hd1, 
                 'last_clicked': last_clicked, 'year_range': year_range, 'active_batches': active_batches}
-    return context
+        return context
