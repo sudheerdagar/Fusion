@@ -76,9 +76,7 @@ def spacs(request):
 
 
 @login_required(login_url='/accounts/login')
-def convener_view(request):
-    print(request)
-    
+def convener_view(request):    
     try:
         convener = Designation.objects.get(name='spacsconvenor')
         hd = HoldsDesignation.objects.get(
@@ -86,11 +84,8 @@ def convener_view(request):
     except:
         return HttpResponseRedirect('/logout')
     if request.method == 'POST':
-        print("this is a check for post request")
         if 'Submit' in request.POST:
-            print("this is a check for post xfhjgisdfkhlsjk request")
             award = request.POST.get('type')
-            print("award " + award)
             programme = request.POST.get('programme')
             batch = request.POST.get('batch')
             from_date = request.POST.get('From')
@@ -112,17 +107,12 @@ def convener_view(request):
             # It updates the student Notification table on the spacs head sending the mcm invitation
             if batch == 'All':
                 active_batches = range(datetime.datetime.now().year - 4 , datetime.datetime.now().year + 1)
-                # active_batches=str(active_batches)
-                # active_batches.split(',')
-                print(active_batches)
                 querybatch = []
                 for curbatch in active_batches:
                     if curbatch > 2019:
                         curbatch=curbatch%2000
                         querybatch.append(curbatch)
-                print( active_batches)
                 query = reduce(or_, (Q(id__id__startswith=batch) for batch in querybatch))
-                print(query)
                 recipient = Student.objects.filter(programme=programme).filter(query)
             else:
                 if(int(batch)>2019):
@@ -130,7 +120,6 @@ def convener_view(request):
                 recipient = Student.objects.filter(programme=programme, id__id__startswith=curbatch)
             
             # Notification starts
-            print(recipient)
             convenor = request.user
             for student in recipient:
                 scholarship_portal_notif(convenor, student.id.user, 'award_' + award)  # Notification
@@ -149,7 +138,6 @@ def convener_view(request):
                     notification_convocation_flag=True,
                     invite_convocation_accept_flag=False) for student in recipient])
             # Notification ends
-            print(batch)
             messages.success(request, 
                     award + ' applications are invited successfully for ' + str(batch) + ' batch(es)')
             return HttpResponseRedirect('/spacs/convener_view')
@@ -292,7 +280,6 @@ def convener_view(request):
 @csrf_exempt
 def student_view(request):
     if request.method == 'POST':
-        
         if 'Submit_MCM' in request.POST:
             return submitMCM(request)
 
@@ -304,7 +291,17 @@ def student_view(request):
 
         elif 'Submit_DM' in request.POST:
             return submitDM(request)
-
+        elif 'get_Spacs_Details' in request.POST:
+            print(request.method)
+            con = Designation.objects.get(name='spacsconvenor')
+            assis = Designation.objects.get(name='spacsassistant')
+            hd = HoldsDesignation.objects.get(designation=con)
+            hd1 = HoldsDesignation.objects.get(designation=assis)
+            hd=HoldsDesignationSerializer(hd).data
+            print(hd)
+            convenor=User.objects.select_related('username').filter(id=hd['user'])
+            print(convenor)
+            return JsonResponse({'result': 'Success'})
         elif "SubmitPreviousWinner" in request.POST:
             if request.headers['X-MOBILE-ENV'] == 'true':
                 winners=submitPreviousWinner(request)
@@ -314,12 +311,7 @@ def student_view(request):
                 winners_list =submitPreviousWinner(request)
                 return sendStudentRenderRequest(request, {'winners_list':winners_list})
     else:
-        if request.headers['X-MOBILE-ENV'] == 'true':
-            data =sendStudentRenderRequest(request)
-            # print(type(data['mcm']))
-            return JsonResponse(data)
-        else:
-            return sendStudentRenderRequest(request)
+        return sendStudentRenderRequest(request)
 
 @login_required(login_url='/accounts/login')
 def staff_view(request):
@@ -582,7 +574,6 @@ def updateEndDate(request):
         return HttpResponse(json.dumps(context), content_type='updateEndDate/json')
 
 def deleteRelease(request):
-    print("deleteRelease")
     id = request.GET.get('id')
     is_deleted = Release.objects.filter(pk=id).delete()
     request.session['last_clicked'] = "Release_deleted"
@@ -1107,7 +1098,6 @@ def submitPreviousWinner(request):
 
     award = Award_and_scholarship.objects.get(award_name=PreviousWinnerAward)
     winners = Previous_winner.objects.select_related('student','award_id').filter(year=PreviousWinnerAcadYear, award_id=award, programme=PreviousWinnerProgramme)
-    print(winners)
     paginator = Paginator(winners, 10)
     page = 1
     try:
@@ -1117,11 +1107,7 @@ def submitPreviousWinner(request):
     except EmptyPage:
         # If page is out of range (e.g. 9999), deliver last page of resulxts.
         winners_list = paginator.page(paginator.num_pages)
-    # print(json.dumps(winners))
     if request.headers['X-MOBILE-ENV'] == 'true':
-        # serializer = PreviousWinnerSerializer(winners, many = True)
-        # print(serializer.data)
-        # return Response(serializer.data, status = status.HTTP_200_OK)
         return winners
     else:
         return winners_list
@@ -1181,10 +1167,8 @@ def sendStudentRenderRequest(request, additionalParams={}):
                             batchCondition = True
                 elif curBatch == checkBatch:
                     True
-                print("bye")
             
-            
-            print(curBatch, checkBatch)
+
             if dates.award == 'Merit-cum-Means Scholarship' and batchCondition and dates.programme == request.user.extrainfo.student.programme:
                 x_notif_mcm_flag = True
                 if no_of_mcm_filled > 0:
@@ -1218,16 +1202,12 @@ def sendStudentRenderRequest(request, additionalParams={}):
         if i.invite_convocation_accept_flag == True:
             show_convocation_flag = True
             break
-    # context.update({'time': time, 'ch': ch, 'spi': spi, 'release': release,
-    #                 'release_count': release_count, 'x_notif_mcm_flag': x_notif_mcm_flag, 'x_notif_con_flag': x_notif_con_flag,
-    #                 'source': source, 'show_mcm_flag': show_mcm_flag, 'show_convocation_flag': show_convocation_flag,
-    #                 'update_mcm_flag': update_mcm_flag, 'update_con_flag': update_con_flag, 'mother_occ': mother_occ,'x': x})
-    # context.update(additionalParams)
-    if request.headers['X-MOBILE-ENV'] == 'true':
-        print('mobile')
-        return context
-    else:
-        return render(request, 'scholarshipsModule/scholarships_student.html',context)
+    context.update({'time': time, 'ch': ch, 'spi': spi, 'release': release,
+                    'release_count': release_count, 'x_notif_mcm_flag': x_notif_mcm_flag, 'x_notif_con_flag': x_notif_con_flag,
+                    'source': source, 'show_mcm_flag': show_mcm_flag, 'show_convocation_flag': show_convocation_flag,
+                    'update_mcm_flag': update_mcm_flag, 'update_con_flag': update_con_flag, 'mother_occ': mother_occ,'x': x})
+    context.update(additionalParams)
+    return render(request, 'scholarshipsModule/scholarships_student.html',context)
 
 def sendStaffRenderRequest(request, additionalParams={}):    
     context = getCommonParams(request)
@@ -1242,8 +1222,6 @@ def sendStatsRenderRequest(request, additionalParams={}):
 def getCommonParams(request):
     student = Student.objects.all()
     mcm = Mcm.objects.select_related('award_id','student').all()
-    mcm=McmSerializer(mcm,many=True)
-    print(type(mcm.data))
     gold = Director_gold.objects.select_related('student','award_id').all()
     silver = Director_silver.objects.select_related('student','award_id').all()
     dandm = Proficiency_dm.objects.select_related('student','award_id').all()
@@ -1259,13 +1237,8 @@ def getCommonParams(request):
         last_clicked = request.session['last_clicked']
     except:
         print('last_clicked not found')
-    if request.headers['X-MOBILE-ENV'] == 'true':
-        context = {'mcm': McmSerializer(mcm,many=True).data, 'awards': AwardsSerializer(awards,many=True).data, 'student': StudentSerializer(student,many=True).data, 'gold': DirecorGoldMedalSerializer(gold,many=True).data, 'silver': DirectorSilverMedalSerializer(silver,many=True).data, 
-                'dandm': ProficiencyDMSerializer(dandm,many=True).data, 'con': DesignationSerializer(con,many=False).data, 'assis': DesignationSerializer(assis,many=False).data, 'hd': HoldsDesignationSerializer(hd,many=False).data, 'hd1': HoldsDesignationSerializer(hd1,many=False).data, 
-                'last_clicked': last_clicked, 'year_range': year_range, 'active_batches': active_batches}
-        return context
-    else:
-        context = {'mcm': mcm, 'awards': awards, 'student': student, 'gold': gold, 'silver': silver, 
+
+    context = {'mcm': mcm, 'awards': awards, 'student': student, 'gold': gold, 'silver': silver, 
                 'dandm': dandm, 'con': con, 'assis': assis, 'hd': hd, 'hd1': hd1, 
                 'last_clicked': last_clicked, 'year_range': year_range, 'active_batches': active_batches}
-        return context
+    return context
