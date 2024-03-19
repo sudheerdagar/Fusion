@@ -208,23 +208,20 @@
                     <th> </th>
                 </tr>
             </thead>
-
-            <tbody>
-                {% for i in release %}
-                <tr>
-                    <td>{{ i.award }}</td>
-                    <td>{{ i.startdate }}</td>
-                    <td>{{ i.enddate }}</td>
-                    <td>{{ i.date_time }}</td>
-                    <td>{{ i.programme}} - {{ i.batch }}</td>
-                    <td> <button class="ui primary button" id='update_release_btn' value='{{ i.id}}'>Update</button>
-                    </td>
-                    <td> <button class="ui primary button" id='delete_release_btn' value='{{ i.id}}'>Delete</button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+              <tbody>
+                    {% for i in release %}
+                  <tr>
+                      <td>{{ i.award }}</td>
+                      <td>{{ i.startdate }}</td>
+                      <td>{{ i.enddate }}</td>
+                      <td>{{ i.date_time }}</td>
+                      <td>{{ i.programme}} - {{ i.batch }}</td>
+                      <td> <button class="ui primary button" id = 'update_release_btn' value='{{ i.id}}'>Update</button> </td>
+                    
+                  </tr>
+                      {% endfor %}
+              </tbody>
+          </table>
     </div>
 
     <div class="ui modal">
