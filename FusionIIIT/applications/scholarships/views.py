@@ -119,11 +119,14 @@ def convener_view(request):
                         querybatch.append(curbatch)
                 print( active_batches)
                 query = reduce(or_, (Q(id__id__startswith=batch) for batch in querybatch))
-                print(query)
+                print("query "+ query)
                 recipient = Student.objects.filter(programme=programme).filter(query)
             else:
+                curbatch = int(batch)
                 if(int(batch)>2019):
                     curbatch=int(batch)%2000
+                print("batch " + str(batch))
+                print("curbatch " + str(curbatch))
                 recipient = Student.objects.filter(programme=programme, id__id__startswith=curbatch)
             
             # Notification starts
@@ -137,14 +140,14 @@ def convener_view(request):
                     release_id=rel,
                     student_id=student,
                     notification_mcm_flag=True,
-                    invite_mcm_accept_flag=False) for student in recipient])
+                    invite_mcm_accept_flag=True) for student in recipient])
             else:
                 rel = Release.objects.get(date_time=d_time)
                 Notification.objects.select_related('student_id','release_id').bulk_create([Notification(
                     release_id=rel,
                     student_id=student,
                     notification_convocation_flag=True,
-                    invite_convocation_accept_flag=False) for student in recipient])
+                    invite_convocation_accept_flag=True) for student in recipient])
             # Notification ends
             print(batch)
             messages.success(request, 
@@ -1070,7 +1073,7 @@ def sendConvenerRenderRequest(request, additionalParams={}):
 
 def sendStudentRenderRequest(request, additionalParams={}):
     context = getCommonParams(request)
-
+    print("check send student enter")
     ch = Constants.BATCH
     time = Constants.TIME
     mother_occ = Constants.MOTHER_OCC_CHOICES
@@ -1095,6 +1098,8 @@ def sendStudentRenderRequest(request, additionalParams={}):
             curBatch = dates.batch
             checkBatch = str(request.user.extrainfo.student)[0:4]
             batchCondition = False
+            print("checkbatch", checkBatch)
+            print("curBatch", curBatch)
             if checkBatch[2] >= "A" and checkBatch[2] <= "Z":
                 if(curBatch == 'All'):
                     batchRange = range(datetime.datetime.now().year - 4, datetime.datetime.now().year + 1)
