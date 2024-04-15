@@ -85,7 +85,7 @@ def convener_view(request):
     if request.method == 'POST':
         print("this is a check for post request")
         if 'Submit' in request.POST:
-            print("this is a check for post xfhjgisdfkhlsjk request")
+            # print("this is a check for post xfhjgisdfkhlsjk request")
             award = request.POST.get('type')
             print("award " + award)
             programme = request.POST.get('programme')
@@ -95,6 +95,7 @@ def convener_view(request):
             remarks = request.POST.get('remarks')
             request.session['last_clicked'] = 'Submit'
             d_time = datetime.datetime.now()
+            # print("batch 1 " + str(batch))
             Release.objects.create(
                 date_time=d_time,
                 programme=programme,
@@ -111,22 +112,22 @@ def convener_view(request):
                 active_batches = range(datetime.datetime.now().year - 4 , datetime.datetime.now().year + 1)
                 # active_batches=str(active_batches)
                 # active_batches.split(',')
-                print(active_batches)
+                # print(active_batches)
                 querybatch = []
                 for curbatch in active_batches:
                     if curbatch > 2019:
                         curbatch=curbatch%2000
                         querybatch.append(curbatch)
-                print( active_batches)
+                # print( active_batches)
                 query = reduce(or_, (Q(id__id__startswith=batch) for batch in querybatch))
-                print("query "+ query)
+                # print("query "+ query)
                 recipient = Student.objects.filter(programme=programme).filter(query)
             else:
                 curbatch = int(batch)
                 if(int(batch)>2019):
                     curbatch=int(batch)%2000
-                print("batch " + str(batch))
-                print("curbatch " + str(curbatch))
+                # print("batch " + str(batch))
+                # print("curbatch " + str(curbatch))
                 recipient = Student.objects.filter(programme=programme, id__id__startswith=curbatch)
             
             # Notification starts
@@ -755,7 +756,7 @@ def submitGold(request):
         for release in releases:
             existingRelease = Director_gold.objects.select_related('student','award_id').filter(Q(date__gte=release.startdate, date__lte=release.enddate)).filter(student=request.user.extrainfo.student)
             if existingRelease:
-                existingRelease.update(
+                Director_gold.objects.select_related('student', 'award_id').filter(Q(date__gte=release.startdate, date__lte=release.enddate)).filter(student=request.user.extrainfo.student).update(
                     student=student_id,
                     relevant_document=relevant_document,
                     award_id=award_id,
@@ -1116,10 +1117,10 @@ def sendStudentRenderRequest(request, additionalParams={}):
                             batchCondition = True
                 elif curBatch == checkBatch:
                     True
-                print("bye")
+                # print("bye")
             
             
-            print(curBatch, checkBatch)
+            # print(curBatch, checkBatch) /
             if dates.award == 'Merit-cum-Means Scholarship' and batchCondition and dates.programme == request.user.extrainfo.student.programme:
                 x_notif_mcm_flag = True
                 if no_of_mcm_filled > 0:
