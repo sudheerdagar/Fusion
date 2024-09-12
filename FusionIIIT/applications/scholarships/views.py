@@ -2,10 +2,13 @@ import datetime
 import json
 from operator import or_
 from functools import reduce
-
+from rest_framework import status
+from rest_framework.response import Response
 from django.http import JsonResponse
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required,permission_required
+from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, HttpResponseRedirect
 # Create your views here.
 from django.db.models import Q
@@ -19,7 +22,8 @@ from applications.globals.models import (Designation, ExtraInfo,
 from .models import (Award_and_scholarship, Constants, Director_gold,
                      Director_silver, Mcm, Notional_prize, Previous_winner,
                      Proficiency_dm, Release, Notification)
-
+from .serializers import *
+from django.views.decorators.csrf import csrf_exempt
 from notification.views import scholarship_portal_notif
 from .validations import MCM_list, MCM_schema, gold_list, gold_schema, silver_list, silver_schema, proficiency_list,proficiency_schema
 from jsonschema import validate
@@ -72,28 +76,38 @@ def spacs(request):
         return HttpResponseRedirect('/spacs/stats')
 
 
-@login_required(login_url='/accounts/login')
-def convener_view(request):
-    print(request)
-    
-    try:
+# @login_required(login_url='/accounts/login')
+
+@csrf_exempt
+def convener_view(request):    
+   
+    if request.headers['x-mobile-env'] == 'true':
         convener = Designation.objects.get(name='spacsconvenor')
-        hd = HoldsDesignation.objects.get(
+       
+    else:
+     try:
+         convener = Designation.objects.get(name='spacsconvenor')
+         hd = HoldsDesignation.objects.get(
             user=request.user, designation=convener)
-    except:
-        return HttpResponseRedirect('/logout')
+     except:
+         return HttpResponseRedirect('/logout')
+    
+    
     if request.method == 'POST':
-        print("this is a check for post request")
-        if 'Submit' in request.POST:
-            print("this is a check for post xfhjgisdfkhlsjk request")
-            award = request.POST.get('type')
-            print("award " + award)
-            programme = request.POST.get('programme')
-            batch = request.POST.get('batch')
-            from_date = request.POST.get('From')
-            to_date = request.POST.get('To')
-            remarks = request.POST.get('remarks')
-            request.session['last_clicked'] = 'Submit'
+        print('post')
+        request.session["last_clicked"] = "Submit"
+        if b"Submit" in request.body:
+          
+            
+            body_str = request.body.decode('utf-8')  # Decode bytes to string
+            json_data = json.loads(body_str)
+            award = json_data.get('type')
+            programme = json_data.get('programme')
+            batch = json_data.get('batch')
+            from_date = json_data.get('From')
+            to_date = json_data.get('To')
+            remarks = json_data.get('remarks')
+            # request.session['last_clicked'] = 'Submit'
             d_time = datetime.datetime.now()
             Release.objects.create(
                 date_time=d_time,
@@ -109,17 +123,12 @@ def convener_view(request):
             # It updates the student Notification table on the spacs head sending the mcm invitation
             if batch == 'All':
                 active_batches = range(datetime.datetime.now().year - 4 , datetime.datetime.now().year + 1)
-                # active_batches=str(active_batches)
-                # active_batches.split(',')
-                print(active_batches)
                 querybatch = []
                 for curbatch in active_batches:
                     if curbatch > 2019:
                         curbatch=curbatch%2000
                         querybatch.append(curbatch)
-                print( active_batches)
                 query = reduce(or_, (Q(id__id__startswith=batch) for batch in querybatch))
-                print(query)
                 recipient = Student.objects.filter(programme=programme).filter(query)
             else:
                 if(int(batch)>2019):
@@ -127,17 +136,23 @@ def convener_view(request):
                 recipient = Student.objects.filter(programme=programme, id__id__startswith=curbatch)
             
             # Notification starts
-            print(recipient)
-            convenor = request.user
+            # if request.headers['x-mobile-env'] == 'true':
+                convenor=request.user
+            # convenor = request.user
+            # else:
             for student in recipient:
-                scholarship_portal_notif(convenor, student.id.user, 'award_' + award)  # Notification
+               
+                 scholarship_portal_notif(convenor, student.id.user, 'award_' + award)  # Notification
+           
             if award == 'Merit-cum-Means Scholarship':
+                
                 rel = Release.objects.get(date_time=d_time)
                 Notification.objects.select_related('student_id','release_id').bulk_create([Notification(
                     release_id=rel,
                     student_id=student,
                     notification_mcm_flag=True,
                     invite_mcm_accept_flag=False) for student in recipient])
+                
             else:
                 rel = Release.objects.get(date_time=d_time)
                 Notification.objects.select_related('student_id','release_id').bulk_create([Notification(
@@ -146,10 +161,12 @@ def convener_view(request):
                     notification_convocation_flag=True,
                     invite_convocation_accept_flag=False) for student in recipient])
             # Notification ends
-            print(batch)
+           
             messages.success(request, 
                     award + ' applications are invited successfully for ' + str(batch) + ' batch(es)')
             return HttpResponseRedirect('/spacs/convener_view')
+            
+            
 
         elif 'Email' in request.POST:
             year = request.POST.get('year')
@@ -270,32 +287,61 @@ def convener_view(request):
             return HttpResponseRedirect('/spacs/convener_view')
 
         elif "SubmitPreviousWinner" in request.POST:
-            winners_list = submitPreviousWinner(request)
-            return sendConvenerRenderRequest(request, { 'winners_list':winners_list })
+            if request.headers['X-MOBILE-ENV'] == 'true':
+                winners=submitPreviousWinner(request)
+                serializer = PreviousWinnerSerializer(winners, many = True)
+                return JsonResponse(serializer.data,safe=False)
+            else:
+                winners_list = submitPreviousWinner(request)
+                return sendConvenerRenderRequest(request, {'winners_list':winners_list})
 
     else:
-        return sendConvenerRenderRequest(request)
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            return JsonResponse({'result': 'Failure'})
+        else:
+            return sendConvenerRenderRequest(request)
 
 
-@login_required(login_url='/accounts/login')
+# @login_required(login_url='/accounts/login')
+@csrf_exempt
 def student_view(request):
-
     if request.method == 'POST':
-        if 'Submit_MCM' in request.POST:
+        if b"Submit_MCM" in request.POST:
+           
             return submitMCM(request)
 
         elif 'Submit_Gold' in request.POST:
+            print("triggerd");
             return submitGold(request)
             
         elif 'Submit_Silver' in request.POST:
+            print("triggerd");
             return submitSilver(request)
 
         elif 'Submit_DM' in request.POST:
+            print("triggerd");
             return submitDM(request)
-
-        elif "SubmitPreviousWinner" in request.POST:
-            winners_list = submitPreviousWinner(request)
-            return sendStudentRenderRequest(request, {'winners_list':winners_list})
+        elif 'get_Spacs_Details' in request.POST:
+            print("triggerd");
+            con = Designation.objects.get(name='spacsconvenor')
+            assis = Designation.objects.get(name='spacsassistant')
+            hd = HoldsDesignation.objects.get(designation=con)
+            hd1 = HoldsDesignation.objects.get(designation=assis)
+            hd=HoldsDesignationSerializer(hd).data
+            print(hd)
+            convenor=User.objects.select_related('username').filter(id=hd['user'])
+            print(convenor)
+            return JsonResponse({'result': 'Success'})
+        elif b"SubmitPreviousWinner" in request.body:
+            
+            if request.headers['X-MOBILE-ENV']=='true':
+                
+                winners=submitPreviousWinner(request)
+                serializer = PreviousWinnerSerializer(winners, many = True)
+                return JsonResponse(serializer.data,safe=False)
+            else:
+                winners_list =submitPreviousWinner(request)
+                return sendStudentRenderRequest(request, {'winners_list':winners_list})
     else:
         return sendStudentRenderRequest(request)
 
@@ -367,20 +413,37 @@ def staff_view(request):
             return HttpResponseRedirect('/spacs/staff_view')
 
         elif "SubmitPreviousWinner" in request.POST:
-            winners_list = submitPreviousWinner(request)
-            return sendStaffRenderRequest(request, {'winners_list':winners_list})
+            if request.headers['X-MOBILE-ENV'] == 'true':
+                winners=submitPreviousWinner(request)
+                serializer = PreviousWinnerSerializer(winners, many = True)
+                return JsonResponse(serializer.data,safe=False)
+            else:
+                winners_list = submitPreviousWinner(request)
+                return sendStaffRenderRequest(request, {'winners_list':winners_list})
 
     else:
-        return sendStaffRenderRequest(request)
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            return JsonResponse({'result': 'Failure'})
+        else:
+            return sendStaffRenderRequest(request)
 
 def stats(request): #  This view is created for the rest of audience excluding students, spacs convenor and spacs assistant
     if request.method == 'POST':
         if "SubmitPreviousWinner" in request.POST:
-            winners_list = submitPreviousWinner(request)
-            return sendStatsRenderRequest(request, {'winners_list':winners_list})
+            if request.headers['X-MOBILE-ENV'] == 'true':
+                winners=submitPreviousWinner(request)
+                serializer = PreviousWinnerSerializer(winners, many = True)
+                return JsonResponse(serializer.data,safe=False)
+            else:
+                winners_list = submitPreviousWinner(request)
+                return sendStatsRenderRequest(request, {'winners_list':winners_list})
     else:
-        return sendStatsRenderRequest(request)
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            return JsonResponse({'result': 'Failure'})
+        else:
+            return sendStatsRenderRequest(request)
 
+@csrf_exempt
 def convenerCatalogue(request):
     if request.method == 'POST':
         award_name = request.POST.get('award_name')
@@ -393,7 +456,10 @@ def convenerCatalogue(request):
             context['result'] = 'Success'
         except:
             context['result'] = 'Failure'
-        return HttpResponse(json.dumps(context), content_type='convenerCatalogue/json')
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            return JsonResponse({'result': context['result']})
+        else:
+            return HttpResponse(json.dumps(context), content_type='convenerCatalogue/json')
     else:
         award_name = request.GET.get('award_name')
         context = {}
@@ -403,7 +469,13 @@ def convenerCatalogue(request):
             context['result'] = 'Success'
         except:
             context['result'] = 'Failure'
-        return HttpResponse(json.dumps(context), content_type='convenerCatalogue/json')
+        if request.headers['X-MOBILE-ENV'] == 'true':
+            if context['result'] == 'Success':
+                return JsonResponse({'result': context['result'], 'catalog': context['catalog']})
+            else:
+                return JsonResponse({'result': context['result']})
+        else:
+            return HttpResponse(json.dumps(context), content_type='convenerCatalogue/json')
 
 
 
@@ -450,7 +522,9 @@ def getWinners(request):
         context['result'] = 'Failure'
         context['message'] = 'No winners found for the provided criteria'
 
-    return JsonResponse(context)
+ 
+        return JsonResponse(context)
+    
 
 def get_MCM_Flag(request):  # Here we are extracting mcm_flag
     x = Notification.objects.select_related('student_id','release_id').filter(student_id=request.user.extrainfo.id)
@@ -465,9 +539,13 @@ def get_MCM_Flag(request):  # Here we are extracting mcm_flag
         context['result'] = 'Success'
     else:
         context['result'] = 'Failure'
-    return HttpResponse(json.dumps(context), content_type='get_MCM_Flag/json')
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        return JsonResponse({'result': context['result'], 'show_mcm_flag': context['show_mcm_flag']})
+    else:
+        return HttpResponse(json.dumps(context), content_type='get_MCM_Flag/json')
     # return HttpResponseRedirect('/spacs/student_view')
 
+# @csrf_exempt
 def getConvocationFlag(request):  # Here we are extracting convocation_flag
     x = Notification.objects.select_related('student_id', 'release_id').filter(student_id=request.user.extrainfo.id)
     for i in x:
@@ -481,8 +559,12 @@ def getConvocationFlag(request):  # Here we are extracting convocation_flag
         context['result'] = 'Success'
     else:
         context['result'] = 'Failure'
-    return HttpResponse(json.dumps(context), content_type='getConvocationFlag/json')
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        return JsonResponse({'result': context['result'], 'show_convocation_flag': context['show_convocation_flag']})
+    else:
+        return HttpResponse(json.dumps(context), content_type='getConvocationFlag/json')
 
+@csrf_exempt
 def getContent(request):
     award_name = request.GET.get('award_name')
     context = {}
@@ -490,12 +572,14 @@ def getContent(request):
         award = Award_and_scholarship.objects.get(award_name=award_name)
         context['result'] = 'Success'
         context['content'] = award.catalog
-        print(type(award.catalog))
         # context['content'] = 'Hi'
 
     except:
         context['result'] = 'Failure'
-    return HttpResponse(json.dumps(context), content_type='getContent/json')
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        return JsonResponse({'result': context['result'], 'content': context['content']})
+    else:
+        return HttpResponse(json.dumps(context), content_type='getContent/json')
 
 def checkDate(start_date, end_date):
     current_date = datetime.date.today()
@@ -507,6 +591,7 @@ def checkDate(start_date, end_date):
     else:
         return False
 
+@csrf_exempt
 def updateEndDate(request):
     id = request.GET.get('up_id')
     end_date = request.GET.get('up_d')
@@ -517,10 +602,12 @@ def updateEndDate(request):
         context['result'] = 'Success'
     else:
         context['result'] = 'Failure'
-    return HttpResponse(json.dumps(context), content_type='updateEndDate/json')
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        return JsonResponse({'result': context['result']})
+    else:
+        return HttpResponse(json.dumps(context), content_type='updateEndDate/json')
 
 def deleteRelease(request):
-    print("deleteRelease")
     id = request.GET.get('id')
     is_deleted = Release.objects.filter(pk=id).delete()
     request.session['last_clicked'] = "Release_deleted"
@@ -538,7 +625,10 @@ def getAwardId(request):
     return award, award_id
 
 def submitMCM(request):
-    i = Notification.objects.select_related('student_id','release_id').filter(student_id=request.user.extrainfo.id)
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        i = Notification.objects.select_related('student_id','release_id').filter(student_id=request.POST.get('student'))
+    else:
+        i = Notification.objects.select_related('student_id','release_id').filter(student_id=request.user.extrainfo.id)
     for x in i:
         x.invite_mcm_accept_flag = False
         x.save()
@@ -567,7 +657,10 @@ def submitMCM(request):
     loan_amount = request.POST.get('loan_amount')
     bank_name = request.POST.get('bank_name')
     income_certificate = request.FILES.get('income_certificate')
-    student = request.user.extrainfo.student
+    if request.headers['X-MOBILE-ENV'] == 'true':
+        student=request.POST.get('student')
+    else:
+        student = request.user.extrainfo.student
     annual_income = income_father + income_mother + income_other
     award, award_id = getAwardId(request)
     data_insert = {
@@ -1033,18 +1126,20 @@ def submitDM(request):
     request.session['last_clicked'] = 'Submit_dm'
     return HttpResponseRedirect('/spacs/student_view')
 
+@csrf_exempt
 def submitPreviousWinner(request):
     request.session["last_clicked"] = "SubmitPreviousWinner"
-    PreviousWinnerAward = request.POST.get("PreviousWinnerAward")
-    PreviousWinnerAcadYear = request.POST.get("PreviousWinnerAcadYear")
-    PreviousWinnerProgramme = request.POST.get("PreviousWinnerProgramme")
+    body_str = request.body.decode('utf-8')  # Decode bytes to string
+    json_data = json.loads(body_str)
+    PreviousWinnerAward = json_data.get("PreviousWinnerAward")
+    PreviousWinnerAcadYear = json_data.get("PreviousWinnerAcadYear")
+    PreviousWinnerProgramme = json_data.get("PreviousWinnerProgramme")
     request.session["PreviousWinnerAward"] = PreviousWinnerAward
     request.session["PreviousWinnerAcadYear"] = PreviousWinnerAcadYear
     request.session["PreviousWinnerProgramme"] = PreviousWinnerProgramme
 
     award = Award_and_scholarship.objects.get(award_name=PreviousWinnerAward)
     winners = Previous_winner.objects.select_related('student','award_id').filter(year=PreviousWinnerAcadYear, award_id=award, programme=PreviousWinnerProgramme)
-
     paginator = Paginator(winners, 10)
     page = 1
     try:
@@ -1052,9 +1147,14 @@ def submitPreviousWinner(request):
     except PageNotAnInteger:
         winners_list = paginator.page(1)
     except EmptyPage:
-        # If page is out of range (e.g. 9999), deliver last page of results.
+        # If page is out of range (e.g. 9999), deliver last page of resulxts.
         winners_list = paginator.page(paginator.num_pages)
-    return winners_list
+    if request.headers['X-MOBILE-ENV'] == 'true':
+       
+
+        return winners
+    else:
+        return winners_list
 
 def sendConvenerRenderRequest(request, additionalParams={}):
     context = getCommonParams(request)
@@ -1111,10 +1211,8 @@ def sendStudentRenderRequest(request, additionalParams={}):
                             batchCondition = True
                 elif curBatch == checkBatch:
                     True
-                print("bye")
             
-            
-            print(curBatch, checkBatch)
+
             if dates.award == 'Merit-cum-Means Scholarship' and batchCondition and dates.programme == request.user.extrainfo.student.programme:
                 x_notif_mcm_flag = True
                 if no_of_mcm_filled > 0:
@@ -1183,6 +1281,7 @@ def getCommonParams(request):
         last_clicked = request.session['last_clicked']
     except:
         print('last_clicked not found')
+
     context = {'mcm': mcm, 'awards': awards, 'student': student, 'gold': gold, 'silver': silver, 
                 'dandm': dandm, 'con': con, 'assis': assis, 'hd': hd, 'hd1': hd1, 
                 'last_clicked': last_clicked, 'year_range': year_range, 'active_batches': active_batches}
